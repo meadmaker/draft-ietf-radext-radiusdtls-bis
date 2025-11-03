@@ -271,7 +271,7 @@ RADIUS/(D)TLS clients and servers MUST follow {{!RFC9525}} when validating peer 
 * RADIUS/(D)TLS servers validate the certificate of the RADIUS/(D)TLS client against a local database of acceptable clients.
   The database may enumerate acceptable clients either by IP address or by a name component in the certificate.
   * For clients configured by DNS name, the configured name is matched against the presented identifiers of any subjectAltName entry of type dNSName {{!RFC5280}}.
-  * For clients configured by their source IP address, the configured IP address is matched against the presented identifiers of any subjectAltName entry of type iPAddress {{!RFC5280}}.
+  * For clients configured by their source IP address, the configured IP address is matched against the presented identifiers of any subjectAltName entry of type IPAddress {{!RFC5280}}.
   * For clients configured by IP range, the certificate MUST be valid for the IP address the client is currently using and the IP range MUST include the IP address the client is currently using.
   * Implementations MAY consider additional subjectAltName extensions to identify a client.
   * If configured by the administrator, the identity check MAY be omitted after a successful {{RFC5280}} trust chain check, e.g. if the client used dynamic lookup there is no configured client identity to verify. The clients authorization MUST then be validated using a certificate policy OID unless both peers are part of a trusted network.
