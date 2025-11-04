@@ -50,7 +50,7 @@ informative:
 This document defines transport profiles for running the Remote
 Authentication Dial In User Service (RADIUS) over Transport Layer
 Security (TLS) and Datagram Transport Layer Security (DTLS), allowing
-the secure and reliable transport of RADIUS messages.  RADIS/TLS and
+the secure and reliable transport of RADIUS messages.  RADIUS/TLS and
 RADIUS/DTLS are collectively referred to as RadSec.
 
 --- middle
@@ -61,7 +61,7 @@ RADIUS/DTLS are collectively referred to as RadSec.
 This document defines transport profiles for running the Remote
 Authentication Dial In User Service (RADIUS) over Transport Layer
 Security (TLS) {{!RFC8446}},{{!RFC5246}} over TCP {{!STD7}} and Datagram
-Transport Layer Security (DTLS) {{!6347}},{{!9147}} over UDP {{!STD6}}.,
+Transport Layer Security (DTLS) {{!RFC6347}},{{!RFC9147}} over UDP {{!STD6}}.,
 allowing secure and reliable transport of RADIUS messages.  RADIUS/TLS
 and RADIUS/DTLS are collectively referred to as RadSec.
 
@@ -107,13 +107,13 @@ RADIUS/UDP:
 : RADIUS transported over UDP as defined in {{RFC2865}}.
 
 (D)TLS handshake message:
-: As defined in DTLS {{RFC9147}}.
+: As defined in TLS {{RFC5246}} and DTLS {{RFC9147}}.
 
 (D)TLS record:
 : As defined in DTLS {{RFC9147}}. A DTLS record is always contained in one UDP datagram.
 
 (D)TLS connection:
-: A single DTLS communication channel (with DTLS this is a synonym for Association).
+: A single (D)TLS communication channel (with DTLS this is a synonym for Association).
 
 UDP datagram:
 : A UDP packet, including the header and data.
@@ -172,8 +172,8 @@ for the (D)TLS session:
 ## Mutual authentication
 {: #mutual_auth }
 
-RadSec servers MUST authenticate clients, and Radsec 
-clients MUST authenticate the server.  
+RadSec servers MUST authenticate clients, and Radsec
+clients MUST authenticate the server.
 
 RADIUS/(D)TLS allows for the following modes of mutual authentication,
 which will be further specified in this section:
@@ -229,7 +229,7 @@ RADIUS/(D)TLS clients and servers MUST follow {{!RFC9525}} when validating endpo
   The database may enumerate acceptable clients either by IP address or by a name component in the certificate.
   * For clients configured by DNS name, the configured name is matched against the presented identifiers of any subjectAltName entry of type dNSName {{!RFC5280}}.
   * For clients configured by their source IP address, the configured IP address is matched against the presented identifiers of any subjectAltName entry of type iPAddress {{!RFC5280}}.
-  * For clients configured by IP range, the certificate MUST be valid for the IP address the client is currently using.
+  * Some servers MAY be configured to accept a client coming from a range or set of IP addresses.  In this case, the server MUST verify that the client IP address of the current connection is a member of the range or set of IP addresses, and the server MUST match the client IP address of the current connection against the presented identifiers of any subjectAltName entry of type iPAddress {{!RFC5280}}.
   * Implementations MAY consider additional subjectAltName extensions to identify a client.
   * If configured by the administrator, the identity check MAY be omitted after a successful {{RFC5280}} trust chain check, e.g. if the client used dynamic lookup there is no configured client identity to verify. The clients authorization MUST then be validated using a certificate policy OID unless both endpoints are part of a trusted network.
 * Implementations MAY allow configuration of a set of additional properties of the certificate to check for a endpoint's authorization to communicate (e.g. a set of allowed values presented in  subjectAltName entries of type uniformResourceIdentifier {{RFC5280}} or a set of allowed X.509v3 Certificate Policies).
@@ -559,6 +559,17 @@ before transmitting any RADIUS packets.  Therefore, in addition to
 retransmission of RADIUS packets, RadSec clients also have to
 deal with connection retries.
 
+Except in cases where an attempted resumption of a TLS session was
+closed by a RadSec server, RadSec clients MUST NOT immediately
+reconnect to a server after a failed connection attempt.  A connection
+attempt is treated as failed if it fails at any point until the (D)TLS
+session is established successfully.  Typical reconnections MUST have
+a lower bound for the time in between retries.  The lower bound SHOULD
+be configurable, but MUST NOT be less than 0.5 seconds.  In cases
+where the server closes the connection on an attempted TLS session
+resumption, the client MUST NOT use TLS session resumption for the
+following connection attempt.
+
 RadSec clients MUST NOT immediately reconnect to a
 RadSec server after a failed connection attempt and MUST have a
 lower bound for the time between retries.  The lower bound SHOULD be
@@ -620,7 +631,7 @@ long-running endpoint relationships with long-running connections.
 
 Implementations SHOULD have configurable limits on the number of open
 connections. When this maximum is reached and a new session is
-started, the server MUST either drop an old session in order to open
+needed, the server MUST either drop an old session in order to open
 the new one or not create a new session.
 
 The close notification of (D)TLS or underlying connections are not
@@ -1307,7 +1318,7 @@ ports for RADIUS/DTLS or RADIUS/TLS.
 
 # Changes to RADIUS
 {: #radiuschanges}
-  
+
 This section discusses the needed changes to the RADIUS packet format
 ({{pktformat}}), port usage and shared secrets ({{portusage}}).
 
@@ -1401,7 +1412,7 @@ there is no reason to choose any other value over another for this
 use.
 
 For RADIUS/TLS, the endpoints MAY send TCP keepalives as described in
-{{!RFC9293, Section 3.8.4}}.  For RADIUS/DTLS connections, the
+{{RFC9293}}, Section 3.8.4.  For RADIUS/DTLS connections, the
 endpoints MAY send periodic keepalives as defined in {{RFC6520}}.
 This is a way of proactively and rapidly triggering a connection DOWN
 notification from the network stack.  These liveness checks are
@@ -1487,7 +1498,7 @@ Service Name and Transport Protocol Port Number Registry:
 
 --- back
 
-## Changes from RFC6614 (RADIUS/TLS) and RFC7360 (RADIUS/DTLS)
+# Changes from RFC6614 (RADIUS/TLS) and RFC7360 (RADIUS/DTLS)
 
 The following list contains the most important changes from the
 previous specifications in {{RFC6613}} (RADIUS/TCP), {{RFC6614}}
