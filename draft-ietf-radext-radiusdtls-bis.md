@@ -197,24 +197,20 @@ RADIUS/(D)TLS peers MUST NOT use the old RADIUS/UDP or RADIUS/TCP ports for RADI
 
 ## Detecting Live Servers
 
-As RADIUS is a "hop-by-hop" protocol, a RADIUS proxy shields the client from any information about downstream servers.
-While the client may be able to deduce the operational state of the local server (i.e., proxy), it cannot make any determination about the operational state of the downstream servers.
+RADIUS/(D)TLS implementations MUST utilize the existence of a TCP, TLS or DTLS connection where applicable in addition to the application-layer watchdog defined in {{!RFC3539, Section 3.4}} when determining liveliness of each connection.
 
-Within RADIUS, proxies typically only forward traffic between the NAS and RADIUS servers, and they do not generate their own response.
-As a result, when a NAS does not receive a response to a request, this could be the result of packet loss between the NAS and proxy, a problem on the proxy, loss between the RADIUS proxy and server, or a problem with the server.
+As RADIUS is a "hop-by-hop" protocol, proxies hide information about the topology downstream to the client.
+While the client may be able to deduce the operational state of the next-hop (i.e. proxy), it is unable to determine the operational state of any hops beyond it.
+This is particularly problematic for topologies that aggregate multiple routes for differing realms behind a proxy where the absence of a reply could lead to a client to incorrectly deduce that the proxy is unavailable when the cause was an unresponsive downstream hop for a single realm. This effect may also be seen on a home servers that uses differing credential backends for each realm they service.
 
-The absence of a reply can cause a client to deduce (incorrectly) that the proxy is unavailable.
-The client could then fail over to another server or conclude that no "live" servers are available (OKAY state in {{!RFC3539, Appendix A}}).
-This situation is made even worse when requests are sent through a proxy to multiple destinations.
-Failures in one destination may result in service outages for other destinations, if the client erroneously believes that the proxy is unresponsive.
+To avoid these issues, RADIUS/(D)TLS clients MUST mark a connection 'DOWN' (as labelled by {{!RFC3539, Section 3.4}}) if one or more of the following conditions are met:
 
-RADIUS/(D)TLS implementations MUST utilize the existence of a TCP/DTLS connection along with the application-layer watchdog defined in {{RFC3539, Section 3.4}} to determine the liveliness of the server.
+* The network stack indicates that the connection is no longer viable; such as the destination being no longer unroutable.
+* The transport layer, D(TLS), provides no usable connection
+* The application-layer watchdog algorithm has marked it 'DOWN'.
 
-RADIUS/(D)TLS clients MUST mark a connection DOWN if one or more of the following conditions are met:
-
-* The administrator has marked the connection as down.
-* The network stack indicates that the connection is no longer viable.
-* The application-layer watchdog algorithm has marked it DOWN.
+When a client opens multiple connections to a server, it is also possible that only one of the connections is unresponsive, e.g. because the server deleted the DTLS session or the connection was load balanced on the server side to a backend server that is now unresponsive.
+Therefore, the liveness check MUST be done on a per-connection basis, and a failure on one connection MUST NOT lead to all connections to this server being marked down.
 
 RADIUS/(D)TLS clients MUST implement the Status-Server extension as described in {{!RFC5997}} as the application level watchdog to detect the liveliness of the peer in the absence of responses.
 RADIUS/(D)TLS servers MUST be able to answer to Status-Server requests.
@@ -270,7 +266,7 @@ Alternative methods, such as post-handshake certificate-based client authenticat
 All RADIUS/(D)TLS server implementations MUST implement this model.
 RADIUS/(D)TLS client implementations SHOULD implement this model, but MUST implement either this or TLS-PSK.
 
-If implemented, it MUST use the following rules:
+If implemented, the following rules apply:
 
 * Implementations MUST allow the configuration of a trust anchor (i.e. a list of trusted Certificate Authorities (CAs){{!RFC5280}}) for new TLS sessions. This list SHOULD be application specific and not use a global system trust store.
 * Certificate validation MUST include the verification rules as per {{!RFC5280}}.
@@ -298,7 +294,7 @@ RADIUS/(D)TLS clients and servers MUST follow {{!RFC9525}} when validating peer 
   The database may enumerate acceptable clients either by IP address or by a name component in the certificate.
   * For clients configured by DNS name, the configured name is matched against the presented identifiers of any subjectAltName entry of type dNSName {{!RFC5280}}.
   * For clients configured by their source IP address, the configured IP address is matched against the presented identifiers of any subjectAltName entry of type iPAddress {{!RFC5280}}.
-    For clients configured by IP range, the certificate MUST be valid for the IP address the client is currently using.
+  * Some servers MAY be configured to accept a client coming from a range or set of IP addresses.  In this case, the server MUST verify that the client IP address of the current connection is a member of the range or set of IP addresses, and the server MUST match the client IP address of the current connection against the presented identifiers of any subjectAltName entry of type iPAddress {{!RFC5280}}.
   * Implementations MAY consider additional subjectAltName extensions to identify a client.
   * If configured by the administrator, the identity check MAY be omitted after a successful {{RFC5280}} trust chain check, e.g. if the client used dynamic lookup there is no configured client identity to verify. The clients authorization MUST then be validated using a certificate policy OID unless both peers are part of a trusted network.
 * Implementations MAY allow configuration of a set of additional properties of the certificate to check for a peer's authorization to communicate (e.g. a set of allowed values presented in  subjectAltName entries of type uniformResourceIdentifier {{RFC5280}} or a set of allowed X.509v3 Certificate Policies).
@@ -489,11 +485,11 @@ RADIUS/(D)TLS clients may need to reconnect to a server that rejected their conn
 In contrast to RADIUS/UDP, RADIUS/(D)TLS establishes a (D)TLS session before transmitting any RADIUS packets.
 Therefore, in addition to retransmission of RADIUS packets, RADIUS/(D)TLS clients also have to deal with connection retries.
 
-RADIUS/(D)TLS clients MUST NOT immediately reconnect to a RADIUS/(D)TLS server after a failed connection attempt and MUST have a lower bound for the time between retries.
-The lower bound SHOULD be configurable.
-As only exception, a RADIUS/(D)TLS client MAY reconnect immediately iff the client attempted to resume a TLS session and the server closed the connection.
-In this case the new connection attempt MUST NOT use TLS session resumption.
-
+Except in cases where an attempted resumption of a TLS session was closed by the RADIUS/(D)TLS server, RADIUS/(D)TLS clients MUST NOT immediately reconnect to a server after a failed connection attempt.
+A connection attempt is treated as failed if it fails at any point until a the (D)TLS session is established successfully.
+Typical reconnections MUST have a lower bound for the time in between retries.
+The lower bound SHOULD be configurable, but MUST NOT be less than 0.5 seconds.
+In cases where the server closes the connection on an attempted TLS session resumption, the client MUST NOT use TLS session resumption for the following connection attempt.
 
 RADIUS/(D)TLS clients MUST implement an algorithm for handling the timing of such reconnection attempts that includes an exponential back-off.
 Using an algorithm similar to the retransmission algorithm defined in {{RFC5080, Section 2.2.1}} is RECOMMENDED.
@@ -519,7 +515,7 @@ See {{duplicates_retransmissions}} for more discussion on retransmission behavio
 
 While RADIUS/UDP could be implemented mostly stateless (except for the requests in flight), both TCP/TLS as well as DTLS require state tracking of the underlying TLS connection and are thus subject to potential resource exhaustion. This is aggravated by the fact that RADIUS client/servers are often statically configured and thus form long-running peer relationships with long-running connections.
 
-Implementations SHOULD have configurable limits on the number of open connections. When this maximum is reached and a new session is started, the server MUST either drop an old session in order to open the new one or not create a new session.
+Implementations SHOULD have configurable limits on the number of open connections. When this maximum is reached and a new session is needed, the server MUST either drop an old session in order to open the new one or not create a new session.
 
 The close notification of (D)TLS or underlying connections are not fully reliable, or connections might be unnecessarily kept alive by heartbeat or watchdog traffic, occupying resources.
 Therefore, both RADIUS/(D)TLS clients and servers MAY close connections after they have been idle for some time (no traffic except application layer watchdog). This idle timeout SHOULD be configurable within reasonable limits and it SHOULD be possible to disable idle timeouts completely.
